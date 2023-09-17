@@ -20,8 +20,18 @@ df_diagnosisfreqbygenderSorted <- df_diagnosisfreqbygender[order(-df_diagnosisfr
 data5 <- df_diagnosisfreqbygenderAndRace[df_diagnosisfreqbygenderAndRace$frequency > 0, ]
 ggplot(data5) + 
     geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
-    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <3500", x="Diagnosis", y="Count") +
-    scale_y_continuous(limits = c(0, 999))
+    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <100", x="Diagnosis", y="Count") +
+    scale_y_continuous(limits = c(0, 99))
+
+ggplot(data5) + 
+    geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
+    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <500", x="Diagnosis", y="Count") +
+    scale_y_continuous(limits = c(100, 499))
+
+ggplot(data5) + 
+    geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
+    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <1000", x="Diagnosis", y="Count") +
+    scale_y_continuous(limits = c(500, 999))
 
 ggplot(data5) + 
     geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 

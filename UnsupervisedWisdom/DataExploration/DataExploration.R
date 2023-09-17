@@ -63,3 +63,4 @@ data4 <- df_diagnosisfreqbygenderSorted[df_diagnosisfreqbygenderSorted$frequency
 ggplot(data4) + 
     geom_count(mapping = aes(x=diagnosis_code, y=frequency, color=sex)) + 
     labs(title = "Frequency of Injury By Diagnosis & Gender", x="Diagnosis", y="Count")
+

@@ -7,7 +7,11 @@
 summary(df_primary)
 
 library(corrplot)
+
+#visualization matrix of the data, looking for correlations
 corrplot(cor(df_numsubset), type= "upper")
+
+
 #the corrplot shows correlation between
 #age v sex, race,body part, disposition, location, alcohol, drugs
 #sex v alcohol, drugs, product 1
@@ -63,4 +67,6 @@ data4 <- df_diagnosisfreqbygenderSorted[df_diagnosisfreqbygenderSorted$frequency
 ggplot(data4) + 
     geom_count(mapping = aes(x=diagnosis_code, y=frequency, color=sex)) + 
     labs(title = "Frequency of Injury By Diagnosis & Gender", x="Diagnosis", y="Count")
+
+
 

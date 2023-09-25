@@ -6,9 +6,9 @@ library(httr)
 library(jsonlite)
 
 
-Sys.setenv(OPENAI_API_KEY="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")
+Sys.setenv(OPENAI_API_KEY="sk-")
 
-OPENAI_API_KEY='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'
+
 
 rm(response)
 response <- create_completion(

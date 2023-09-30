@@ -1,0 +1,270 @@
+---
+title: "Emergency Room Falling Injury Analysis"
+output: html_notebook
+---
+
+#Introduction
+This analysis was done by Mike Goldweber, Sept 2023. Submitted to DrivenData.org on Oct 6, 2023. This document shows;
+the step by step process of analyzing the emergency room data provided in the Unsupervised Wisdom contest.
+
+
+# Data Ingestion
+The data used in this project is the Primary data set. This contains 115,128 rows of data. The data is pulled into two dataframes. One called df_original, and the other is called df_mapped. The df_mapped set is modified by the example code so that it produces human readable data. the df_original set will be modified by the feature engineer to be usable by the modeling done below.
+
+
+
+```{r}
+#You'll want to adjust your file path for your environment
+filepath <- "c:\\_working\\Machine-Learning\\UnsupervisedWisdom\\Data\\primary_data.csv"
+
+df_original <- read.csv(filepath)
+```
+
+## Setting up the categorical mapping dataframe
+The code for the next two blocks was take directly from the Community Code section of the contest website, found at: https://www.drivendata.org/competitions/217/cdc-fall-narratives/community-code/.
+
+```{r}
+library(jsonlite)
+
+mappingfile <- 'c:\\_working\\Machine-Learning\\UnsupervisedWisdom\\Data\\variable_mapping.json'
+mapping <- fromJSON(mappingfile)
+names(mapping)
+
+# Convert to data frames so we can use in joins
+mapping_tables <- list()
+for (col in names(mapping)) {
+    mapping_tables[[col]] <- data.frame(
+        ind=as.integer(names(mapping[[col]])),  # change to integer types
+        values=unlist(mapping[[col]])
+    )
+}
+```
+
+Now that the JSON information has been ingested, we'll map the categories on to the dataframe, which we will call **df_mapped**.
+```{r}
+library(dplyr)
+
+# Load primary data
+df_mapped <- df_primary
+
+# Join and replace encoded column
+for (col in names(mapping)) {
+    df_mapped <- df_mapped %>%
+        left_join(mapping_tables[[col]], by=setNames("ind", col)) %>%
+        mutate(!!col := values) %>%
+        select(-values)
+}
+
+
+```
+
+
+
+
+
+# Data Clean Up/ Preliminary Feature Engineer
+Let's look at the dataset to get an initial feel for the data quality by running a summary
+
+```{r}
+summary(df_original)
+```
+Usually a concern is missing data scattered randomly thoughtout the set. In this case, the summary shows the data is in good shape. That is there isn't much in the way of missing data. The only NA's we see are in the diagnosis_2 and body_part_2 columns. This isn't a suprise, because the ER patients didn't necessarily suffer secondary injuries. There is a correlation between these two columns, given the identical number of NAs at 71,983. These columns will have to be explored further to determine if it should be used in our modeling.
+
+However, glancing at the data sets directly shows gaps in some of the other columns. For example body_part_2, other_diagnosis and other_diagnosis_2 contain many gaps.
+
+```{r}
+#scroll to the right to see the empty columns (example body_part_2, other_diagnosis and other_disagnosis_2).
+head(df_mapped)
+```
+
+
+# Data Exploration
+This is actually the critical portion of the project, and most of the effort was spent on this work in order to understand the scope of the problem. The results of this exploration affected later portions of the exploration. Let's begin by looking at correlations between the columns
+
+## Correlation Plot
+
+```{r}
+library(corrplot)
+
+#we need to use numerical values for the correlation. So, we'll make a subset of the data.
+df_numsubset<- df_original[, c(4:6, 8:9, 13, 15:22)]
+
+#visualization matrix of the data, looking for correlations
+corrplot(cor(df_numsubset), type= "upper")
+```
+We see strong correlations between race and hispanic, product_1 and product_2, as well as product_2 and product_3. Honestly, this doesn't seem to be very helpful. At least as this stage. Our focus is on the injuries. There are some connections to age and some of the other factors. Including alcohol. So, we'll have to explore this.
+
+## Age
+Let's look at the age category. In particular, let's see if there is a particular age that is hit harder than another age. The block converts it into a table, and the plot shows the frequency of injuries by age.
+```{r}
+library(ggplot2)
+
+
+#frequency of injuries by age
+data <- df_numsubset[, c('age', 'sex')]
+df_agefreq <- as.data.frame(table(data$age))
+colnames(df_agefreq)[1] <- "age" 
+colnames(df_agefreq)[2] <- "frequency" 
+#head(df_agefreq)
+ggplot(df_agefreq) + 
+    geom_count(mapping = aes(x=age, y=frequency)) + 
+    labs(title = "Frequency of Injury By Age", x="Age", y="Count")
+```
+What is interesting about this plot, it shows that the injury frequency is relatively high (over 3500) until age 88. I am wondering if the fall off is due to some environmental movement, or is the population over 88 shrinking? There is a bit of a plateau for ages 71-80, where each group has over 4000 injuries, except for age 76 with 3993 injuries. 
+
+## Sex (Gender)
+Next, let's look at the breakdown of sex (gender) in this dataset.
+
+```{r}
+#63% of the injuries are to women
+
+genderlabels <- c("Male", "Female")
+gender <- as.vector(df_original[ ,'sex'])
+gentable <- as.data.frame(table(gender))
+
+gentable$gender <- mapvalues(gentable$gender, c( "1", "2"), genderlabels)
+
+pie(gentable$Freq, labels = genderlabels, main="Sex Breakdown")
+
+percentoffemales <- (gentable[2, 'Freq']/nrow(df_original)*100)
+out <- sprintf("Percentage of females in this dataset: %f)", percentoffemales) #percentage of females in this dataset
+out
+
+```
+
+```{r, include=FALSE}
+#cleanup
+rm(gender, gentable, genderlables, out)
+```
+
+
+This plot visually shows the breakdown of sex in this dataset. We see that at **63.1%**, females represents the majority of cases in this dataset.
+
+### Age and Gender
+Next, let's look at the split by age and gender.
+
+```{r}
+library(ggplot2)
+library(sqldf)
+library(reshape2)
+
+results <- sqldf('SELECT age, sex, count(sex) AS "frequency"
+                        FROM dfmapping
+                        GROUP BY age, sex')
+
+# reshape the dataframe into a long format
+results <- melt (results, id.vars = c ("sex", "age"))
+
+# plot two lines for different genders
+ggplot (results, aes (x = age, y = value, group = sex, color = sex)) +
+  geom_line () +
+  labs (x = "Age", y = "Injury Frequency", color = "Sex")
+```
+
+```{r, include=FALSE}  
+rm(results)
+```
+
+
+This chart shows a significant difference by gender across the ages of the patients. First, this plot confirms the previous pie chart plot by showing the female population suffers greater numbers of injuries *across* the age spectrum. As we explore further, we'll have to consider different approaches for helping each gender. Of note, this shows the data set only includes males and females. The other categories are not represented in this dataset.
+
+
+
+## Data Exploration by Race and Sex
+Next, let's factor in the race of the patients to see if any particular group is affected more than the others. After looking at the upper level data by race, we'll look at the hispanic breakdown at the population.
+
+:::: {.columns}
+::: {column width=50%
+
+
+### Breakdown By Race
+We'll start off with a simple pie chart to see.
+
+
+```{r}
+
+if (system.file(package = "waffle") == "") {
+  install.packages("waffle")
+}
+
+library(ggplot2)
+library(waffle)
+
+rcounts <- as.data.frame(table(df_mapped$race))
+colnames(rcounts)[1]<-"race"
+colnames(rcounts)[2]<-"frequency"
+
+vec <- numeric()
+vecS <- character()
+
+for(i in rcounts$frequency)
+{
+    x <- i/nrow(df_original)
+    x <- x*100
+    vec <- c(vec, x)
+    
+    s <- ifelse((x > 7.0), sprintf("%f%%", x), "")#display only meaning values on the pie chart
+    vecS <- c(vecS, s)
+}
+
+rcounts <- cbind(rcounts, new_col = vec)
+colnames(rcounts)[3]<-"percent"
+
+rcounts <- cbind(rcounts, new_col = vecS)
+colnames(rcounts)[4]<-"labels"
+
+ggplot(rcounts, aes(x = "", y = percent, fill = race)) +
+  geom_bar(stat="identity", width=1) +
+  geom_text(aes(label = labels), position = position_stack(vjust = 0.5)) +
+  scale_fill_manual(values = c("#E59866", "#FCF3CF", "#AF601A", "#CCCCCC", "#BD0026", "#AAAAAA", "#FAD7AD")) +
+  coord_polar("y", start=0)
+```    
+
+```{r, include=FALSE}  
+rm(vec, vecS, x, s)
+```
+This chart is problematic, because of the high percentage of N.S. (not stated). So it maybe difficult to accurately identify a racial component to these injuries. 
+:::
+::: {column width=50%
+### Hispanic
+
+
+
+right
+:::
+::::
+
+
+## Diagnosis
+Next is a look at the diagnosis
+
+## Diagnosis Race and Gender
+While there is some doubt about
+
+
+# Addition Feature Engineering
+
+```{r}
+library(waffle)
+
+results <- sqldf('SELECT age, sex, count(sex) AS "frequency"
+                        FROM dfmapping
+                        GROUP BY age, sex')
+
+ggplot(data5) + 
+geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
+    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <100", x="Diagnosis", y="Count")
+```
+
+# Data Modeling with Hiearchical Model
+
+```{r}
+
+```
+
+# Using ChatGPT for Analysis of the Narrative Data
+
+```{r}
+
+```
+

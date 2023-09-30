@@ -24,7 +24,8 @@ corrplot(cor(df_numsubset), type= "upper")
 library(ggplot2)
 
 
-#frequency of injuries by age
+
+##frequency of injuries by age
 data <- df_numsubset[, c('age', 'sex')]
 df_agefreq <- as.data.frame(table(data$age))
 colnames(df_agefreq)[1] <- "age" 
@@ -34,7 +35,7 @@ ggplot(df_agefreq) +
     geom_count(mapping = aes(x=df_agefreq$age, y=df_agefreq$frequency)) + 
     labs(title = "Frequency of Injury By Age", x="Age", y="Count")
 
-#frequency of each diagnosis
+##frequency of each diagnosis
 data2 <-df_numsubset[, c('diagnosis')]
 df_diagnosisfreq <- as.data.frame(table(data2))
 colnames(df_diagnosisfreq)[1] <- "diagnosis_code" 

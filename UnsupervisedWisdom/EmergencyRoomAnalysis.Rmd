@@ -7,6 +7,7 @@ output: html_notebook
 This analysis was done by Mike Goldweber, Sept 2023. Submitted to DrivenData.org on Oct 6, 2023. This document shows;
 the step by step process of analyzing the emergency room data provided in the Unsupervised Wisdom contest.
 
+The full set of project files can be found at: https://github.com/halciber/Machine-Learning/tree/master/UnsupervisedWisdom.
 
 # Data Ingestion
 The data used in this project is the Primary data set. This contains 115,128 rows of data. The data is pulled into two dataframes. One called df_original, and the other is called df_mapped. The df_mapped set is modified by the example code so that it produces human readable data. the df_original set will be modified by the feature engineer to be usable by the modeling done below.
@@ -18,10 +19,13 @@ The data used in this project is the Primary data set. This contains 115,128 row
 filepath <- "c:\\_working\\Machine-Learning\\UnsupervisedWisdom\\Data\\primary_data.csv"
 
 df_original <- read.csv(filepath)
+
+#we'll use this variable frequently
+rowcount <- nrow(df_mapped)
 ```
 
 ## Setting up the categorical mapping dataframe
-The code for the next two blocks was take directly from the Community Code section of the contest website, found at: https://www.drivendata.org/competitions/217/cdc-fall-narratives/community-code/.
+The code for the next two blocks was take directly from the Community Code section of the contest website, found at: https://www.drivendata.org/competitions/217/cdc-fall-narratives/community-code/.The purpose of this block is to take the JSON coding information and match it to the numeric values found in primary_data.csv. I've found this version of the dataset to be helpful in understanding the data. For example, "57 - FRACTURE" is more meaningful than the original "57". My intention is to use the df_mapped dataframe primarily with the data exploration and the. df_original, created in the code block above will be used for the modeling work after modification in the Feature Engineer section below.
 
 ```{r}
 library(jsonlite)
@@ -79,7 +83,9 @@ head(df_mapped)
 
 
 # Data Exploration
-This is actually the critical portion of the project, and most of the effort was spent on this work in order to understand the scope of the problem. The results of this exploration affected later portions of the exploration. Let's begin by looking at correlations between the columns
+This is actually the critical portion of the project, and most of the effort was spent on this work in order to understand the scope of the problem. The results of this exploration affected later portions of the exploration. Please note, the narrative column won't be looked at in the data exploration. The goal is to use ChatGPT to analyze  this data and return helpful results. So, this part of the data is being handled separately.
+
+Let's begin by looking at correlations between the columns.
 
 ## Correlation Plot
 
@@ -126,11 +132,13 @@ gentable$gender <- mapvalues(gentable$gender, c( "1", "2"), genderlabels)
 
 pie(gentable$Freq, labels = genderlabels, main="Sex Breakdown")
 
-percentoffemales <- (gentable[2, 'Freq']/nrow(df_original)*100)
+percentoffemales <- (gentable[2, 'Freq']/rowcount*100)
 out <- sprintf("Percentage of females in this dataset: %f)", percentoffemales) #percentage of females in this dataset
 out
 
 ```
+This plot visually shows the breakdown of sex in this dataset. We see that at **63.1%**, females represents the majority of cases in this dataset. So, we'll pay particular attention to the factors affecting this part of the population.
+
 
 ```{r, include=FALSE}
 #cleanup
@@ -138,7 +146,8 @@ rm(gender, gentable, genderlables, out)
 ```
 
 
-This plot visually shows the breakdown of sex in this dataset. We see that at **63.1%**, females represents the majority of cases in this dataset.
+
+
 
 ### Age and Gender
 Next, let's look at the split by age and gender.
@@ -149,7 +158,7 @@ library(sqldf)
 library(reshape2)
 
 results <- sqldf('SELECT age, sex, count(sex) AS "frequency"
-                        FROM dfmapping
+                        FROM df_mapped
                         GROUP BY age, sex')
 
 # reshape the dataframe into a long format
@@ -166,15 +175,11 @@ rm(results)
 ```
 
 
-This chart shows a significant difference by gender across the ages of the patients. First, this plot confirms the previous pie chart plot by showing the female population suffers greater numbers of injuries *across* the age spectrum. As we explore further, we'll have to consider different approaches for helping each gender. Of note, this shows the data set only includes males and females. The other categories are not represented in this dataset.
-
+This chart shows a significant difference by gender across the ages of the patients. First, this plot confirms the previous pie chart plot by showing the female population suffers greater numbers of injuries *across the age spectrum*. As we explore further, we'll have to consider the possibility of using different approaches for helping each gender. Of note, this shows the data set only includes males and females. The other categories are not represented in this dataset.
 
 
 ## Data Exploration by Race and Sex
 Next, let's factor in the race of the patients to see if any particular group is affected more than the others. After looking at the upper level data by race, we'll look at the hispanic breakdown at the population.
-
-:::: {.columns}
-::: {column width=50%
 
 
 ### Breakdown By Race
@@ -199,11 +204,11 @@ vecS <- character()
 
 for(i in rcounts$frequency)
 {
-    x <- i/nrow(df_original)
+    x <- i/rowcount
     x <- x*100
     vec <- c(vec, x)
     
-    s <- ifelse((x > 7.0), sprintf("%f%%", x), "")#display only meaning values on the pie chart
+    s <- ifelse((x > 7.0), sprintf("%.2f%%", x), "")#display only meaning values on the pie chart
     vecS <- c(vecS, s)
 }
 
@@ -216,30 +221,439 @@ colnames(rcounts)[4]<-"labels"
 ggplot(rcounts, aes(x = "", y = percent, fill = race)) +
   geom_bar(stat="identity", width=1) +
   geom_text(aes(label = labels), position = position_stack(vjust = 0.5)) +
-  scale_fill_manual(values = c("#E59866", "#FCF3CF", "#AF601A", "#CCCCCC", "#BD0026", "#AAAAAA", "#FAD7AD")) +
-  coord_polar("y", start=0)
+  scale_fill_manual(values = c("#E59866", "#FCF3CF", "#AF601A", "#AED6F1", "#BD0026", "#27AE60", "#FAD7AD")) + ##E59866
+  coord_polar("y", start=0) + 
+  labs(title = "Breakdown of the Patient Population by Race",
+          #subtitle = "test",
+          caption = "34.4% did not state their race, making a racial correlation difficult")
 ```    
 
 ```{r, include=FALSE}  
-rm(vec, vecS, x, s)
+rm(vec, vecS, x, s, rcounts)
 ```
 This chart is problematic, because of the high percentage of N.S. (not stated). So it maybe difficult to accurately identify a racial component to these injuries. 
-:::
-::: {column width=50%
+
 ### Hispanic
 
 
+```{r}
+if (system.file(package = "waffle") == "") {
+  install.packages("waffle")
+}
 
-right
-:::
-::::
+library(ggplot2)
+library(waffle)
+
+hcounts <- as.data.frame(table(df_mapped$hispanic))
+colnames(hcounts)[1]<-"hispanic"
+colnames(hcounts)[2]<-"frequency"
+
+vec <- numeric()
+vecS <- character()
+
+for(i in hcounts$frequency)
+{
+    x <- i/rowcount
+    x <- x*100
+    vec <- c(vec, x)
+    
+    s <- sprintf("%.2f%%", x)
+    vecS <- c(vecS, s)
+}
+
+hcounts <- cbind(hcounts, new_col = vec)
+colnames(hcounts)[3]<-"percent"
+
+hcounts <- cbind(hcounts, new_col = vecS)
+colnames(hcounts)[4]<-"labels"
+
+ggplot(hcounts, aes(x = "", y = percent, fill = hispanic)) +
+  geom_bar(stat="identity", width=3) +
+  geom_text(aes(label = labels), position = position_stack(vjust = 0.5)) +
+  scale_fill_manual(values = c("#E59866","#27AE60", "#FCF3CF")) +   
+  coord_polar("y", start=0) + 
+  labs(title = "Breakdown of the Hispanic Population",
+          #subtitle = "test",
+          caption = "Only 3% of the patients identify as Hispanic")
+```
+So, the majority of patients are not hispanic, however, we can't conclude not being hispanic makes a person more likey to fall.
+```{r, include=FALSE}
+#cleanup
+rm(vec, vecS, x, s, hcounts)
+```
+
+
+```{r}
+if (system.file(package = "moonBook") == "") {
+  install.packages("moonBook")
+}
+
+if (system.file(package = "webr") == "") {
+  install.packages("webr")
+}
+
+library(moonBook)
+library(ggplot2)
+library(webr)
+library(dplyr)
+
+rhcounts <- as.data.frame(table(df_mapped$hispanic, df_mapped$race))
+colnames(rhcounts)[1]<-"hispanic"
+colnames(rhcounts)[2]<-"race"
+colnames(rhcounts)[3]<-"frequency"
+
+webr::PieDonut(rhcounts, aes(hispanic, race, count=frequency), 
+              r0 = 0.3, #hides the center
+               r1 = 0.7,
+               #explode = 3,
+               #explodeDonut = TRUE,
+               pieLabelSize = 3,
+               donutLabelSize = 4,
+               title = "Hispanic and Racial Breakdown")
+
+```
+As with the Hispanic pie chart, and with only 3% of the injured set being hispanic, I'm not convinced that hispanic=yes correlates to a fall. Further, no one racial group stands out Certainly, part of the Unk/Not Stated group is probably hispanic, but we don't know for certain. Further obfuscating this part of the hispanic set is the N.S part of the race data, which represents 76% of the Unknown hispanic group. 
+
+
+We'll continue to look at race, but I don't believe there is anything to be gained from including the hispanic column in our model.
+
+
+
+```{r, ignore=TRUE}
+rm(rhcounts)
+```
+
 
 
 ## Diagnosis
-Next is a look at the diagnosis
+Next is a look at the diagnosis column. We'll start off by looking for the most heavily diagnosed injuries.
 
-## Diagnosis Race and Gender
-While there is some doubt about
+```{r}
+#grouping the diagnosis column, looking for the most frequent injury
+
+##frequency of each diagnosis
+dcounts <-df_mapped[, c('diagnosis')]
+
+df_diagnosisfreq <- as.data.frame(table(dcounts))
+colnames(df_diagnosisfreq)[1] <- "diagnosis_code" 
+colnames(df_diagnosisfreq)[2] <- "frequency" 
+
+#sort the data in descending order
+df_diagnosisfreqSorted <- df_diagnosisfreq[order(-df_diagnosisfreq$frequency),]
+head(df_diagnosisfreqSorted)
+
+#cleanup
+rm(dcounts, df_diagnosisfreq)
+```
+From this sorting, we know that fractures, internal injuries, contusions abj, and lacertations make up the majority of the 26 listed injuries by a significant amount.
+
+```{r}
+#based on the frequency of this plot, we can see that the first 4 items represent the majority of the diagnosis
+#lets look at the percentage of the cases
+
+highest4diagnosis <- sum(df_diagnosisfreqSorted$frequency[1:4]) # This equals 99,868
+percentoftop4diagnosis <- highest4diagnosis/rowcount    #115128=total injuries 86.7%
+print(sprintf("Percentage of the top 4 injuries is: %f%%, or %i total reported injuries.", percentoftop4diagnosis*100, highest4diagnosis))
+
+
+library(ggplot2)
+library(waffle)
+
+
+rm(vec, vecs)
+
+vec <- numeric()
+vecS <- character()
+vecColor <- character()
+
+n <- nrow(df_diagnosisfreqSorted)
+
+for(i in 1:n)
+{
+    row <- df_diagnosisfreqSorted[i, ]
+    
+    code <- as.character(row$diagnosis_code)
+    freq <- as.integer(row$frequency)
+    
+    print(c(code, freq))
+    
+    perc <- (freq/rowcount)*100
+    
+    vec <- c(vec, perc) #add value to a vector
+    sDiag <- ifelse((perc > 10.0), sprintf("%s", code), "")#display only meaning values on the pie chart
+    vecS <- c(vecS, sDiag)
+    
+    sColor <- ifelse((i < 5), "#AA0000", "#0000AA")
+    vecColor <- c(vecColor, sColor)                     
+}#end of apply
+
+
+df_diagnosisfreqSorted <- cbind(df_diagnosisfreqSorted, new_col = vec)
+colnames(df_diagnosisfreqSorted)[3]<-"percent"
+
+df_diagnosisfreqSorted <- cbind(df_diagnosisfreqSorted, new_col = vecS)
+colnames(df_diagnosisfreqSorted)[4]<-"labels"
+
+df_diagnosisfreqSorted <- cbind(df_diagnosisfreqSorted, new_col = vecColor)
+colnames(df_diagnosisfreqSorted)[5]<-"colors"
+
+ggplot(df_diagnosisfreqSorted, aes(x = "", y = frequency, fill = diagnosis_code)) +
+  geom_bar(stat="identity", width=1) +
+  geom_text(aes(label = labels), position = position_stack(vjust = 0.5)) +
+  #scale_fill_manual(values = df_diagnosisfreqSorted$colors) +
+  coord_polar("y", start=0)
+
+```
+Seeing the majority (86%) of the dataset is diagnosed with these 4 injuries (fractures, internal injuries, contusions abj, and lacertations), our focus will be on how age, race and location play a part with these injuries.
+
+```{r, ignore=TRUE}
+#cleanup
+rm(vec, vecS, vecColor, df_diagnosisfreqSorted)
+```
+### Fire Involvement and Alcohol
+Related to the injuries are the cases of burns and alcohol having an effect on the falling injuries. Let's take a look to see how the patient population in this dataset has been affected by them.We know from the diagnosis frequencies, that burn injuries 
+
+#### Fire Involvement
+```{r}
+##frequency of the burn diagnosis
+burncounts <- sqldf('SELECT diagnosis, count(diagnosis) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "47 - BURN, NOT SPEC." or diagnosis = "49 - BURN, CHEMICAL" or diagnosis = "48 - BURN, SCALD" or diagnosis = "51 - BURNS, THERMAL")
+                        GROUP BY diagnosis
+                        ORDER BY frequency DESC')
+
+head(burncounts)
+
+
+##frequency of fire_involvement
+fcounts <-df_mapped[, c('fire_involvement')]
+
+df_firefreq <- as.data.frame(table(fcounts))
+colnames(df_firefreq)[1] <- "fire_involvement" 
+colnames(df_firefreq)[2] <- "frequency" 
+
+#sort the data in descending order
+df_FireIsFreqSorted <- df_firefreq[order(-df_firefreq$frequency),]
+head(df_FireIsFreqSorted)
+
+#cleanup
+rm(burncounts, fcounts, df_firefreq, df_FireIsFreqSorted)
+```
+From these numbers, we see there is very few burn injuries. Eightyone total, or 0.7% of the total dataset. For this project, we won't explore burn injuries or fire involvement further because this is such a small part of the population.
+
+#### Alcohol
+Unlike the burns and fire involvement, there isn't a set of injuries that specifically connects with alcohol usage. So, if we see a large number of patients that reported alcohol usage, it will be interesting to see which diagnosis were tied to it.
+
+```{r}
+##frequency of the burn diagnosis
+alcoholcounts <- sqldf('SELECT alcohol, count(alcohol) AS "frequency"
+                        FROM df_mapped
+                        GROUP BY alcohol
+                        ORDER BY frequency DESC')
+
+head(alcoholcounts)
+
+yestotal <- alcoholcounts[2,2]
+
+percent <- yestotal/rowcount*100
+print(sprintf("Percentage of cases where alcohol was related to the falling injury: %.2f%%.", percent))
+#cleanup
+rm(alcoholcounts, yestotal, percent)
+```
+The number of alcohol related cases is 2588, or 2.25% of the patients in the dataset. For this project, we won't explore alcohol further because this represents a small part of the population.
+
+## Locations Where Patients Reported Getting Hurt
+I want to take a quick look at where people are getting hurt. This could impact how we look for correlations later on.
+
+```{r}
+
+locationresults <- sqldf('SELECT location, count(location) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                        GROUP BY location')
+
+pie(locationresults$frequency, labels = locationresults$location, main="Location Breakdown")
+
+#percentoffemales <- (gentable[2, 'Freq']/rowcount*100)
+#ut <- sprintf("Percentage of females in this dataset: %f)", percentoffemales) #percentage of females in this dataset
+#out
+```
+This pie chart isn't the prettiest, but it does clearly show that Home is the primary location where injuries take place. This is followed up by Public and Unknown. Unknown is a frustrating result for this portion of the data, because it isn't clear how to mitigate problems at this location.
+
+
+## Diagnosis, Race, and Gender
+Let's look to see if there is any correlation between the injuries, race, and gender, with the focus being on the top 4 injuries identified above.
+
+```{r}
+if (system.file(package = "sqldf") == "") {
+  install.packages("sqldf")
+}
+
+library(sqldf)
+library(plyr)
+library(dplyr)
+
+#frequency of each diagnosis by gender
+results <- sqldf('SELECT diagnosis, sex, count(*) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                        GROUP BY diagnosis, sex
+                        ORDER BY diagnosis, sex, frequency DESC')
+
+
+#plot them
+ggplot(results) + 
+    geom_count(mapping = aes(x=diagnosis, y=frequency, color=sex)) + 
+    labs(title = "Frequency of Injury By Diagnosis & Gender", x="Diagnosis", y="Count")
+```
+ From this plot, we can see that women are severely diagnosed with "57 - Fractures" and "63 - Internal Injury"; however, women suffer from all of these top diagnosis more than men. **So special attention** has to be paid for addressing the factors affecting women.
+ 
+## Diagnosis, Sex (Gender), and Location 
+So far, we've seen individual breakdowns of the data, but let's start mixing up the columns in the hopes of exposing a culprete to the problem.
+
+```{r}
+locationresults <- sqldf('SELECT location, diagnosis, sex, count(sex) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                        GROUP BY location, diagnosis, sex')
+sum(locationresults$frequency) #results = 99868
+    #<-    df_firefreq[order(-df_firefreq$frequency),]
+sorted <- locationresults[order(-locationresults$frequency),]
+
+head(sorted)
+
+rm(locationresults, sorted)
+
+```
+This result is interesting because we see that fractures and internal injuries affect women by a significant amount **at home**.
+
+
+# Location, Diagnosis, Body Part
+Now that we've identified females are being disproportional hurt at home, which body_part is affected the most? 
+
+I'm focused on the women, however, let's continue to look at men in the query.
+```{r}
+locationresults <- sqldf('SELECT location, diagnosis, body_part, sex, count(sex) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                        GROUP BY location, diagnosis, body_part,  sex')
+sum(locationresults$frequency) #results = 99868
+    #<-    df_firefreq[order(-df_firefreq$frequency),]
+sorted <- locationresults[order(-locationresults$frequency),]
+
+head(sorted)
+
+```
+These results are helpful. Previously we saw fractures at the most serious problem. However, when we factor in the body_part we see the internal injuries to the head at home and in the public location is the most serious problem
+
+```{r, ignore=TRUE}
+rm(locationresults, sorted)
+```
+
+Let's look at this same data with just the women.
+```{r}
+
+locationresults <- sqldf('SELECT location, diagnosis, body_part, sex, count(sex) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY") AND
+                                (sex = "FEMALE")
+                        GROUP BY location, diagnosis, body_part,  sex')
+sum(locationresults$frequency) #results = 99868
+    #<-    df_firefreq[order(-df_firefreq$frequency),]
+sorted <- locationresults[order(-locationresults$frequency),]
+
+head(sorted)
+
+```
+From this table, we see that when the diagnosis is an internal injury, the head is the body part injuried the most. Home is the most likely place for the injuries, followed by the public or unknown locations. Next most frequent injury is the upper or lower trunk experiencing fractures.
+
+Let do a similar query for the males to see how they are affected.
+```{r}
+
+locationresults <- sqldf('SELECT location, diagnosis, body_part, sex, count(sex) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY") AND
+                                (sex = "MALE")
+                        GROUP BY location, diagnosis, body_part,  sex')
+sum(locationresults$frequency) #results = 99868
+    #<-    df_firefreq[order(-df_firefreq$frequency),]
+sorted <- locationresults[order(-locationresults$frequency),]
+
+head(sorted)
+
+```
+The results for men are very similar in that internal injuries to the head are hit the male population with the greatest frequency. Also, like the females, we see that males experience the fractures to the lower and upper trunk most frequently (after the head injuries), and the major of these injuries are at home.
+
+## Connections to Products?
+Next, let's see if there is a tie to the products.
+
+```{r}
+
+locationresults <- sqldf('SELECT location, diagnosis, body_part, product_1,  sex, count(sex) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                        GROUP BY location, diagnosis, body_part, product_1,  sex')
+#sum(locationresults$frequency) #results = 99868
+    #<-    df_firefreq[order(-df_firefreq$frequency),]
+sorted <- locationresults[order(-locationresults$frequency),]
+
+head(sorted)
+
+```
+This query shows the majority of products are tied to floors or flooring materials. Does this mean the patient just fell on the floor leading to the internal injuries and fractures? Also of note home, internal injury, and heads are the most likely to be the combination for our patients. Let's look at the same data with just the floors.
+
+```{r}
+
+locationresults <- sqldf('SELECT location, diagnosis, body_part, product_1,  count(product_1) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                                AND (product_1 = "1807 - FLOORS OR FLOORING MATERIALS")
+                        GROUP BY location, diagnosis, body_part, product_1')
+sorted <- locationresults[order(-locationresults$frequency),]
+head(sorted)
+
+sum <- sum(locationresults$frequency)
+percent <- sum/rowcount * 100
+
+print(   sprintf("The total frequency of the floor/ flooring materials injuries is %i, or %.2f%%.", sum, percent ))
+
+```
+As we combine the various data columns to our data exploration, we are seeing distinct groupings of the factors that make up this dataset.
+
+
+## Tieing Together the Data Exploration.
+As previously observed, females at home, suffer internal injuries to their heads when landing on the floors. Let's look at the revised dataset when we look at the most frequently sustain injuries.
+
+```{r}
+if (system.file(package = "circlepacketR") == "") {
+  install.packages("circlepacketR")
+}
+
+library(sqldf)
+
+#
+locationresults <- sqldf('select sex, location, diagnosis, body_part, frequency
+                        from(
+                            SELECT sex, location, diagnosis, body_part, count(*) AS "frequency"
+                            FROM df_mapped
+                            WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                                  
+                            GROUP BY sex, location, diagnosis, body_part
+                            ORDER BY sex, location, diagnosis, body_part
+                        ) as t
+                        WHERE frequency > 500
+                        ORDER BY frequency DESC
+                        ')
+
+
+
+
+```
+
+
+
+## Body Part 2, Products 2, and Product 3
+I'm reluctant to delve too deeply into these columns. First, these 3 columns are mostly blank, so where there is data in these columns, it seems to be a secondary result of the body_part and product_1. In other words, if we come up with a way to prevent injury to body_part with product_1, then we can prevent problems with body_part_2 and product_2 and product_3.
 
 
 # Addition Feature Engineering
@@ -248,7 +662,7 @@ While there is some doubt about
 library(waffle)
 
 results <- sqldf('SELECT age, sex, count(sex) AS "frequency"
-                        FROM dfmapping
+                        FROM df_mapped
                         GROUP BY age, sex')
 
 ggplot(data5) + 

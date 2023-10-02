@@ -1,3 +1,6 @@
+# DataExplorationByHispanicAndRace.R
+#
+# This file looks at the breakdown of the hispanic and racial parts of the dataset.
 require(ggplot2)
 require(moonBook)
 
@@ -7,6 +10,11 @@ library(ggplot2)
 library(webr)
 library(dplyr)
 
+
+rhcounts <- as.data.frame(table(df_mapped$hispanic, df_mapped$race))
+colnames(rhcounts)[1]<-"hispanic"
+colnames(rhcounts)[2]<-"race"
+colnames(rhcounts)[3]<-"frequency"
 
 head(rhcounts)
 

@@ -97,6 +97,8 @@ df_numsubset<- df_original[, c(4:6, 8:9, 13, 15:22)]
 
 #visualization matrix of the data, looking for correlations
 corrplot(cor(df_numsubset), type= "upper")
+
+rm(df_numsubset)
 ```
 We see strong correlations between race and hispanic, product_1 and product_2, as well as product_2 and product_3. Honestly, this doesn't seem to be very helpful. At least as this stage. Our focus is on the injuries. There are some connections to age and some of the other factors. Including alcohol. So, we'll have to explore this.
 
@@ -410,7 +412,7 @@ Seeing the majority (86%) of the dataset is diagnosed with these 4 injuries (fra
 #cleanup
 rm(vec, vecS, vecColor, df_diagnosisfreqSorted)
 ```
-### Fire Involvement and Alcohol
+### Fire Involvement, Alcohol, and Drug Use
 Related to the injuries are the cases of burns and alcohol having an effect on the falling injuries. Let's take a look to see how the patient population in this dataset has been affected by them.We know from the diagnosis frequencies, that burn injuries 
 
 #### Fire Involvement
@@ -461,6 +463,29 @@ print(sprintf("Percentage of cases where alcohol was related to the falling inju
 rm(alcoholcounts, yestotal, percent)
 ```
 The number of alcohol related cases is 2588, or 2.25% of the patients in the dataset. For this project, we won't explore alcohol further because this represents a small part of the population.
+
+#### Drug Use
+Let's check to see if drug use played a big impact on the falling injuries.
+
+```{r}
+library(sqldf)
+
+##frequency of the burn diagnosis
+drugcounts <- sqldf('SELECT drug, count(drug) AS "frequency"
+                        FROM df_mapped
+                        GROUP BY drug
+                        ORDER BY frequency DESC')
+
+head(drugcounts)
+
+yestotal <- drugcounts[2,2]
+
+percent <- yestotal/rowcount*100
+print(sprintf("Percentage of cases where alcohol was related to the falling injury: %.2f%%.", percent))
+#cleanup
+rm(drugcounts, yestotal, percent)
+```
+Drug use covers 4% of the injuries, or 4645 cases. This does represent a small amount of the patient population.
 
 ## Locations Where Patients Reported Getting Hurt
 I want to take a quick look at where people are getting hurt. This could impact how we look for correlations later on.
@@ -657,18 +682,56 @@ I'm reluctant to delve too deeply into these columns. First, these 3 columns are
 
 
 # Addition Feature Engineering
+This part of the project we will modify the dataset in order to allow the unsupervised model to run efficiently. The next few blocks of code will walk through this process step-by-step.
+
+## Removing extraneous Rows
+Based on what we've learned through the data exploration, I believe we can focus on the top 4 diagnosed injuries: fractures, internal injuries, contusions, and lacerations. These 4 diagnoses comprise 86% of the dataset.
 
 ```{r}
-library(waffle)
+df_modelingdata <- sqldf('SELECT *
+                          FROM df_mapped
+                          WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                        ')
+#verify the smaller dataset.
+modelrowct <- nrow(df_modelingdata)
 
-results <- sqldf('SELECT age, sex, count(sex) AS "frequency"
-                        FROM df_mapped
-                        GROUP BY age, sex')
+print(sprintf("The new row count is %i. The percentage of the row count in the modified dataset vs the original set: %.2f%%.", modelrowct, modelrowct/rowcount))
 
-ggplot(data5) + 
-geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
-    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <100", x="Diagnosis", y="Count")
+head(df_modelingdata)
+
 ```
+The new row count matches what was shown in the data exploration. So, this step is correct.
+
+## Removing extraneous Columns
+
+Next, the data exploration revealed that race, other race, hispanic, fire, alcohol, and drug use did not appear to be major factors in the fall. So these columns will be eliminated.
+
+Columns other race, other diagnosis, diagnosis 2, other diagnosis 2, body part 2, product 2, and product 3 contain too many empty values. So, these columns will be eliminated as well.
+```{r}
+library(dplyr)
+df_modelingdata <- select(df_modelingdata, -c(race, hispanic, fire_involvement, alcohol, drug))
+
+df_modelingdata <- select(df_modelingdata, -c(other_race, other_diagnosis, diagnosis_2, other_diagnosis_2, body_part_2, product_2, product_3))
+
+head(df_modelingdata)
+```
+
+## Creating a dataset for use with the LLM.
+I want a parallel dataset to use with ChatGPT. So, at this step, I'm going to copy df_modelingdata before additional modifications.
+
+```{r}
+#copy df_modelingdata
+df_llm <- df_modelingdata
+```
+
+I don't believe the case number will help the modeling, so I'll remove this column from df_modelingdata.
+
+```{r}
+df_modelingdata <- select(df_modelingdata, -c(cpsc_case_number))
+```
+
+## Converting the data columns
+
 
 # Data Modeling with Hiearchical Model
 

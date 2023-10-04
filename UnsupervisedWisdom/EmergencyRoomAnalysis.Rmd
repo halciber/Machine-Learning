@@ -406,12 +406,134 @@ ggplot(df_diagnosisfreqSorted, aes(x = "", y = frequency, fill = diagnosis_code)
   coord_polar("y", start=0)
 
 ```
-Seeing the majority (86%) of the dataset is diagnosed with these 4 injuries (fractures, internal injuries, contusions abj, and lacertations), our focus will be on how age, race and location play a part with these injuries.
+Seeing the majority (86%) of the dataset is diagnosed with these 4 injuries (fractures, internal injuries, contusions abj, and lacertations), our focus will be on how age, race and location play a part with these injuries. 
+
+### Injuried Diagnosed Over Time
+Before that, let's see if when the injuries took place plays a role. However, we will focus on the top 4 diagnosed injuries.
+```{r}
+if (system.file(package = "sqldf") == "") {
+  install.packages("sqldf")
+}
+library(sqldf)
+ 
+injuriesbydate <- sqldf('SELECT treatment_date, diagnosis, count(*) as frequency
+                         FROM df_mapped
+                         WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                         GROUP BY treatment_date, diagnosis
+                         ORDER BY treatment_date
+                        ')
+#, diagnosis, count(diagnosis)
+#
+#GROUP BY diagnosis, GROUP BY treatment_date
+#ORDER BY treatment_date
+head(injuriesbydate)
+
+injuriesbydate$diagnosis <- as.factor(injuriesbydate$diagnosis)
+
+ggplot (injuriesbydate, aes (x = treatment_date, y = frequency, group = diagnosis, color = diagnosis)) +
+  geom_line () +
+  labs (x = "Treatment Date", y = "Injury Frequency", color = "Diagnosis")
+
+  
+
+```
+This was meant to show 4 nice lines, but there is a wide date range in this plot. While seeing a specific date is not possible, we can see a spike in the injuries in the last third of of the time period. Looking further into this would be worthwhile.
+
+```{r}
+m53 <- sqldf('SELECT MEDIAN(frequency) as median
+             FROM injuriesbydate
+             WHERE (diagnosis = "53 - CONTUSIONS, ABR.")
+             ')
+
+m57 <- sqldf('SELECT MEDIAN(frequency) as median
+             FROM injuriesbydate
+             WHERE (diagnosis = "57 - FRACTURE")
+             ')
+
+m59 <- sqldf('SELECT MEDIAN(frequency) as median
+             FROM injuriesbydate
+             WHERE (diagnosis = "59 - LACERATION")
+             ')
+
+m62 <- sqldf('SELECT MEDIAN(frequency) as median
+             FROM injuriesbydate
+             WHERE (diagnosis = "62 - INTERNAL INJURY")
+             ')
+print(
+    sprintf("The median values for each injury over time are 53 = %.2f, 57 =  %.2f, 59 = %.2f, 62 = %.2f", m53, m57, m59, m62)
+    )
+
+m53 <- sqldf('SELECT MEDIAN(frequency) as median
+             FROM injuriesbydate
+             WHERE (diagnosis = "53 - CONTUSIONS, ABR.") AND (treatment_date > \'2022-01-01\')
+             ')
+
+m57 <- sqldf('SELECT MEDIAN(frequency) as median
+             FROM injuriesbydate
+             WHERE (diagnosis = "57 - FRACTURE") AND (treatment_date > \'2022-01-01\')
+             ')
+
+m59 <- sqldf('SELECT MEDIAN(frequency) as median
+             FROM injuriesbydate
+             WHERE (diagnosis = "59 - LACERATION") AND (treatment_date > \'2022-01-01\')
+             ')
+
+m62 <- sqldf('SELECT MEDIAN(frequency) as median
+             FROM injuriesbydate
+             WHERE (diagnosis = "62 - INTERNAL INJURY") AND (treatment_date > \'2022-01-01\')
+             ')
+print(
+    sprintf("The median values for each injury in 2022 are 53 = %.2f, 57 =  %.2f, 59 = %.2f, 62 = %.2f", m53, m57, m59, m62)
+    )
+
+```
+These results confirm the visualization. The question is, why is there a spike in the injuries? Could it be the result of COVID lock downs ending, and people leaving their homes? Or is there something else? Time permitting, it might be interesting to see what factors are different for the last third of the time range.
 
 ```{r, ignore=TRUE}
 #cleanup
 rm(vec, vecS, vecColor, df_diagnosisfreqSorted)
+rm(m53, m57, m59, m62, injuriesbydate)
 ```
+
+### Injuries by Racial Group
+This visualization plots the injuries by racial group and gender. Outside of people reporting as white, no one group stood out at disproportional numbers, but breaking this down by injury could expose a problem.
+
+```{r}
+
+injuryracegender <- sqldf('SELECT diagnosis, sex, race, count(*) as frequency
+                         FROM df_mapped
+                         WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                         GROUP BY diagnosis, sex, race
+                        ')
+
+
+ggplot(injuryracegender) + 
+    geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
+    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <100", x="Diagnosis", y="Count") +
+    scale_y_continuous(limits = c(0, 99))
+
+ggplot(injuryracegender) + 
+    geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
+    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <500", x="Diagnosis", y="Count") +
+    scale_y_continuous(limits = c(100, 499))
+
+ggplot(injuryracegender) + 
+    geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
+    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <1000", x="Diagnosis", y="Count") +
+    scale_y_continuous(limits = c(500, 999))
+
+ggplot(injuryracegender) + 
+    geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
+    labs(title = "Frequency of Injury By Diagnosis, Gender, & race <3500", x="Diagnosis", y="Count") +
+    scale_y_continuous(limits = c(1000, 3499))
+
+ggplot(injuryracegender) + 
+    geom_point(mapping = aes(x=diagnosis, y=frequency, color=race, alpha=race, shape=sex)) + 
+    labs(title = "Frequency of Injury By Diagnosis, Gender, & race >=3500", x="Diagnosis", y="Count") +
+    scale_y_continuous(limits = c(3500, 7500))
+```
+Based on what these charts are showing us, I don't believe minority groups are being disproportionately affected. Whites and N.S. appear to be the greatest number of patients. So, for the scope of this project, I don't see race being a factor.
+
 ### Fire Involvement, Alcohol, and Drug Use
 Related to the injuries are the cases of burns and alcohol having an effect on the falling injuries. Let's take a look to see how the patient population in this dataset has been affected by them.We know from the diagnosis frequencies, that burn injuries 
 
@@ -499,6 +621,9 @@ locationresults <- sqldf('SELECT location, count(location) AS "frequency"
 
 pie(locationresults$frequency, labels = locationresults$location, main="Location Breakdown")
 
+#Add home, public, and unknown, the top 3 locations for injuries
+locationsum <- locationresults[2, 2] + locationresults[5, 2] + locationresults[9, 2]
+print(sprintf("The total of home, public, and unknown is %i. This represents %.2f%% of the total dataset.", locationsum, locationsum/rowcount))
 #percentoffemales <- (gentable[2, 'Freq']/rowcount*100)
 #ut <- sprintf("Percentage of females in this dataset: %f)", percentoffemales) #percentage of females in this dataset
 #out
@@ -515,8 +640,10 @@ if (system.file(package = "sqldf") == "") {
 }
 
 library(sqldf)
-library(plyr)
 library(dplyr)
+library(plyr)
+library(ggplot2)
+
 
 #frequency of each diagnosis by gender
 results <- sqldf('SELECT diagnosis, sex, count(*) AS "frequency"
@@ -609,16 +736,43 @@ head(sorted)
 ```
 The results for men are very similar in that internal injuries to the head are hit the male population with the greatest frequency. Also, like the females, we see that males experience the fractures to the lower and upper trunk most frequently (after the head injuries), and the major of these injuries are at home.
 
+## Products
+A quick look at the product numbers.
+
+```{r}
+library(sqldf)
+
+productresults <- sqldf('SELECT product_1, count(product_1) AS "frequency"
+                        FROM df_mapped
+                        WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
+                        GROUP BY product_1')
+
+productresults <- productresults[order(-productresults$frequency),]
+
+#get the results that equate to at least 1% of the patients (ie 1000+)
+productresults <- sqldf('SELECT * 
+                        FROM productresults
+                        WHERE frequency > 1000
+                        ')
+
+
+
+head(productresults)
+
+```
+The variable productresults will be used below
+
 ## Connections to Products?
 Next, let's see if there is a tie to the products.
 
 ```{r}
+library(sqldf)
 
 locationresults <- sqldf('SELECT location, diagnosis, body_part, product_1,  sex, count(sex) AS "frequency"
                         FROM df_mapped
                         WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
                         GROUP BY location, diagnosis, body_part, product_1,  sex')
-#sum(locationresults$frequency) #results = 99868
+
     #<-    df_firefreq[order(-df_firefreq$frequency),]
 sorted <- locationresults[order(-locationresults$frequency),]
 
@@ -685,13 +839,44 @@ I'm reluctant to delve too deeply into these columns. First, these 3 columns are
 This part of the project we will modify the dataset in order to allow the unsupervised model to run efficiently. The next few blocks of code will walk through this process step-by-step.
 
 ## Removing extraneous Rows
-Based on what we've learned through the data exploration, I believe we can focus on the top 4 diagnosed injuries: fractures, internal injuries, contusions, and lacerations. These 4 diagnoses comprise 86% of the dataset.
+Based on what we've learned through the data exploration, I believe we can focus on the top 4 diagnosed injuries: fractures, internal injuries, contusions, and lacerations. These 4 diagnoses comprise 86% of the dataset. Next, is the location data. The top 3 represent the vast majority of the cases. Finally, I took the top 14 product_1 items. This is somewhat arbitraty, but unlike the other columns, there isn't a small subset that stands out. So, I opted to take any product where there was at least ~1% of the dataset.
 
 ```{r}
+#select the top 4 injuries
+
+library(sqldf)
 df_modelingdata <- sqldf('SELECT *
                           FROM df_mapped
                           WHERE (diagnosis = "53 - CONTUSIONS, ABR." or diagnosis = "57 - FRACTURE" or diagnosis = "59 - LACERATION" or diagnosis = "62 - INTERNAL INJURY")
                         ')
+
+
+#select the top 3 locations
+df_modelingdata <- sqldf('SELECT *
+                          FROM df_modelingdata
+                          WHERE (location = "HOME" or location = "PUBLIC" or location = "UNK")
+                        ')
+
+
+#select the top 14 products
+df_modelingdata <- sqldf('SELECT *
+                          FROM df_modelingdata
+                          WHERE (product_1 = "1807 - FLOORS OR FLOORING MATERIALS" 
+                                or product_1 = "4076 - BEDS OR BEDFRAMES, OTHER OR NOT SPECIFIED" 
+                                or product_1 = "1842 - STAIRS OR STEPS" 
+                                or product_1 = "4074 - CHAIRS, OTHER OR NOT SPECIFIED" 
+                                or product_1 = "611 - BATHTUBS OR SHOWERS" 
+                                or product_1 = "649 - TOILETS" 
+                                or product_1 = "4057 - TABLES (EXCL.  BABY CHANGING TABLES, BILLIARD OR POOL TABLES" 
+                                or product_1 = "676 - RUGS OR CARPETS, NOT SPECIFIED" 
+                                or product_1 = "1884 - CEILINGS AND WALLS (INTERIOR PART OF COMPLETED STRUCTURE)" 
+                                or product_1 = "1615 - FOOTWEAR" 
+                                or product_1 = "4078 - LADDERS, OTHER OR NOT SPECIFIED" 
+                                or product_1 = "1817 - PORCHES, BALCONIES, OPEN-SIDE FLOORS OR FLOOR OPENINGS" 
+                                or product_1 = "1893 - DOORS, OTHER OR NOT SPECIFIED"
+                                or product_1 = "3299 - EXERCISE (ACTIVITY OR APPAREL, W/O EQUIP)")
+                        ')
+
 #verify the smaller dataset.
 modelrowct <- nrow(df_modelingdata)
 
@@ -700,16 +885,18 @@ print(sprintf("The new row count is %i. The percentage of the row count in the m
 head(df_modelingdata)
 
 ```
-The new row count matches what was shown in the data exploration. So, this step is correct.
+The new row count matches what was shown in the data exploration. There must have been a lot of overlap with the eliminated injury and location row, because the total comes down to 85%. The first filtering (of the injuries) brought the total down to 86% of the original, so removing these locations didn't change much.
 
 ## Removing extraneous Columns
 
 Next, the data exploration revealed that race, other race, hispanic, fire, alcohol, and drug use did not appear to be major factors in the fall. So these columns will be eliminated.
 
+The focus of this project is to prevent falling injuries. The disposition column represents the end of the incident, which doesn't help us prevent the fall. So, this column will be eliminated.
+
 Columns other race, other diagnosis, diagnosis 2, other diagnosis 2, body part 2, product 2, and product 3 contain too many empty values. So, these columns will be eliminated as well.
 ```{r}
 library(dplyr)
-df_modelingdata <- select(df_modelingdata, -c(race, hispanic, fire_involvement, alcohol, drug))
+df_modelingdata <- select(df_modelingdata, -c(race, hispanic, fire_involvement, alcohol, drug, disposition))
 
 df_modelingdata <- select(df_modelingdata, -c(other_race, other_diagnosis, diagnosis_2, other_diagnosis_2, body_part_2, product_2, product_3))
 
@@ -724,18 +911,95 @@ I want a parallel dataset to use with ChatGPT. So, at this step, I'm going to co
 df_llm <- df_modelingdata
 ```
 
-I don't believe the case number will help the modeling, so I'll remove this column from df_modelingdata.
+
+
+## Creating Binary Columns
+Using numeric value for the modeling is more efficient. In this step, we'll convert the character columns into n number of binary columns.
+
+The fastDummies library comes from "Kaplan, J. & Schlegel, B. (2023). fastDummies: Fast Creation of Dummy (Binary) Columns and Rows from Categorical Variables. Version 1.7.1. URL: https://github.com/jacobkap/fastDummies, https://jacobkap.github.io/fastDummies/."
 
 ```{r}
-df_modelingdata <- select(df_modelingdata, -c(cpsc_case_number))
+if (system.file(package = "fastDummies") == "") {
+  install.packages("fastDummies")
+}
+
+library(fastDummies)
+
+#each df will need the case number as a unique ID to merge with the df_modelingdata
+casenumber <- df_modelingdata$cpsc_case_number
+
+
+#create a df for each of the columns to make into binary columns
+sex <- df_modelingdata$sex
+df1 <- fastDummies::dummy_cols(as.data.frame(sex))
+#add the case number, remove the sex column
+df1$cpsc_case_number <- casenumber
+df1 <- select(df1, -c(sex))
+
+diagnosis <- df_modelingdata$diagnosis
+df2 <- fastDummies::dummy_cols(as.data.frame(diagnosis))
+df2$cpsc_case_number <- casenumber
+df2 <- select(df2, -c(diagnosis))
+
+bodypart <- df_modelingdata$body_part
+df3 <- fastDummies::dummy_cols(as.data.frame(bodypart))
+df3$cpsc_case_number <- casenumber
+df3 <- select(df3, -c(bodypart))
+
+location <- df_modelingdata$location
+df4 <- fastDummies::dummy_cols(as.data.frame(location))
+df4$cpsc_case_number <- casenumber
+df4 <- select(df4, -c(location))
+
+product <- df_modelingdata$product_1
+df5 <- fastDummies::dummy_cols(as.data.frame(product))
+df5$cpsc_case_number <- casenumber
+df5 <- select(df5, -c(product))
+
+
+#merge each of the small columns into df_modelingdata
+df_modelingdata <- merge(df_modelingdata, df1, by = "cpsc_case_number")
+df_modelingdata <- merge(df_modelingdata, df2, by = "cpsc_case_number")
+df_modelingdata <- merge(df_modelingdata, df3, by = "cpsc_case_number")
+df_modelingdata <- merge(df_modelingdata, df4, by = "cpsc_case_number")
+df_modelingdata <- merge(df_modelingdata, df5, by = "cpsc_case_number")
+
+rm(sex, diagnosis, bodypart, location, product)
+rm(df1, df2, df3, df4, df5)
+
+#now that these columns are now binary, it is time to remove the originals
+df_modelingdata <- select(df_modelingdata, -c(sex, diagnosis, body_part, location, product_1))
+
+
 ```
 
-## Converting the data columns
-
-
-# Data Modeling with Hiearchical Model
+I don't believe the case number will help the modeling, so I'll remove this column from df_modelingdata. For the modeling, the narrative column isn't not helpful.
 
 ```{r}
+#df_modelingdata <- select(df_modelingdata, -c(cpsc_case_number, narrative))
+df_modelingdata <- select(df_modelingdata, -c(treatment_date))
+
+summary(df_modelingdata)
+```
+
+# Data Modeling with Hiearchical Model
+For this model, I was initially thinking of using a hierarchical clustering model, but I believe my data exploration exposed a hierarchy, so I'm going to look at k-mean-clustering model to look at the data from a different perspective. Its quick and easy to do, but might reveal something interesting.
+
+```{r}
+if (system.file(package = "factoextra") == "") {
+  install.packages("factoextra")
+}
+if (system.file(package = "cluster") == "") {
+  install.packages("cluster")
+}
+
+library(factoextra)
+library(cluster)
+
+clusters <- 4
+randomsets <- 25
+
+model <- kmeans(df_modelingdata, centers = clusters, nstart = randomsets)
 
 ```
 

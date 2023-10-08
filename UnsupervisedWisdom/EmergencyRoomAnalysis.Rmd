@@ -1,6 +1,8 @@
 ---
 title: "Emergency Room Falling Injury Analysis"
-output: html_notebook
+output:
+  html_notebook: default
+  pdf_document: default
 ---
 
 #Introduction
@@ -21,7 +23,7 @@ filepath <- "c:\\_working\\Machine-Learning\\UnsupervisedWisdom\\Data\\primary_d
 df_original <- read.csv(filepath)
 
 #we'll use this variable frequently
-rowcount <- nrow(df_mapped)
+rowcount <- nrow(df_original)
 ```
 
 ## Setting up the categorical mapping dataframe
@@ -49,7 +51,7 @@ Now that the JSON information has been ingested, we'll map the categories on to 
 library(dplyr)
 
 # Load primary data
-df_mapped <- df_primary
+df_mapped <- df_original
 
 # Join and replace encoded column
 for (col in names(mapping)) {
@@ -58,8 +60,9 @@ for (col in names(mapping)) {
         mutate(!!col := values) %>%
         select(-values)
 }
+head(df_mapped)
 
-
+#rm(col)
 ```
 
 
@@ -98,7 +101,7 @@ df_numsubset<- df_original[, c(4:6, 8:9, 13, 15:22)]
 #visualization matrix of the data, looking for correlations
 corrplot(cor(df_numsubset), type= "upper")
 
-rm(df_numsubset)
+
 ```
 We see strong correlations between race and hispanic, product_1 and product_2, as well as product_2 and product_3. Honestly, this doesn't seem to be very helpful. At least as this stage. Our focus is on the injuries. There are some connections to age and some of the other factors. Including alcohol. So, we'll have to explore this.
 
@@ -117,6 +120,8 @@ colnames(df_agefreq)[2] <- "frequency"
 ggplot(df_agefreq) + 
     geom_count(mapping = aes(x=age, y=frequency)) + 
     labs(title = "Frequency of Injury By Age", x="Age", y="Count")
+
+rm(df_agefreq, data)
 ```
 What is interesting about this plot, it shows that the injury frequency is relatively high (over 3500) until age 88. I am wondering if the fall off is due to some environmental movement, or is the population over 88 shrinking? There is a bit of a plateau for ages 71-80, where each group has over 4000 injuries, except for age 76 with 3993 injuries. 
 
@@ -124,6 +129,14 @@ What is interesting about this plot, it shows that the injury frequency is relat
 Next, let's look at the breakdown of sex (gender) in this dataset.
 
 ```{r}
+
+if (system.file(package = "plyr") == "") {
+  install.packages("plyr")
+}
+
+library(plyr)
+
+
 #63% of the injuries are to women
 
 genderlabels <- c("Male", "Female")
@@ -144,12 +157,9 @@ This plot visually shows the breakdown of sex in this dataset. We see that at **
 
 ```{r, include=FALSE}
 #cleanup
-rm(gender, gentable, genderlables, out)
+rm(gender, gentable, genderlables, out, percentoffemales)
+
 ```
-
-
-
-
 
 ### Age and Gender
 Next, let's look at the split by age and gender.
@@ -345,7 +355,7 @@ df_diagnosisfreqSorted <- df_diagnosisfreq[order(-df_diagnosisfreq$frequency),]
 head(df_diagnosisfreqSorted)
 
 #cleanup
-rm(dcounts, df_diagnosisfreq)
+rm(dcounts)
 ```
 From this sorting, we know that fractures, internal injuries, contusions abj, and lacertations make up the majority of the 26 listed injuries by a significant amount.
 
@@ -356,7 +366,6 @@ From this sorting, we know that fractures, internal injuries, contusions abj, an
 highest4diagnosis <- sum(df_diagnosisfreqSorted$frequency[1:4]) # This equals 99,868
 percentoftop4diagnosis <- highest4diagnosis/rowcount    #115128=total injuries 86.7%
 print(sprintf("Percentage of the top 4 injuries is: %f%%, or %i total reported injuries.", percentoftop4diagnosis*100, highest4diagnosis))
-
 
 library(ggplot2)
 library(waffle)
@@ -405,7 +414,17 @@ ggplot(df_diagnosisfreqSorted, aes(x = "", y = frequency, fill = diagnosis_code)
   #scale_fill_manual(values = df_diagnosisfreqSorted$colors) +
   coord_polar("y", start=0)
 
+
+
 ```
+```{r, include=FALSE}
+rm(df_diagnosisfreq, df_diagnosisfreqSorted)
+rm(highest4diagnosis)
+rm(i, n, perc, percentoftop4diagnosis, sColor, sDiag, vec, vecColor, vecS, freq, row)
+```
+
+
+
 Seeing the majority (86%) of the dataset is diagnosed with these 4 injuries (fractures, internal injuries, contusions abj, and lacertations), our focus will be on how age, race and location play a part with these injuries. 
 
 ### Injuried Diagnosed Over Time
@@ -432,9 +451,9 @@ injuriesbydate$diagnosis <- as.factor(injuriesbydate$diagnosis)
 
 ggplot (injuriesbydate, aes (x = treatment_date, y = frequency, group = diagnosis, color = diagnosis)) +
   geom_line () +
-  labs (x = "Treatment Date", y = "Injury Frequency", color = "Diagnosis")
+  labs (title = "Frequency of Injury By Day",x = "Treatment Date", y = "Injury Frequency", color = "Diagnosis")
 
-  
+
 
 ```
 This was meant to show 4 nice lines, but there is a wide date range in this plot. While seeing a specific date is not possible, we can see a spike in the injuries in the last third of of the time period. Looking further into this would be worthwhile.
@@ -624,6 +643,8 @@ pie(locationresults$frequency, labels = locationresults$location, main="Location
 #Add home, public, and unknown, the top 3 locations for injuries
 locationsum <- locationresults[2, 2] + locationresults[5, 2] + locationresults[9, 2]
 print(sprintf("The total of home, public, and unknown is %i. This represents %.2f%% of the total dataset.", locationsum, locationsum/rowcount))
+
+rm(locationsum)
 #percentoffemales <- (gentable[2, 'Freq']/rowcount*100)
 #ut <- sprintf("Percentage of females in this dataset: %f)", percentoffemales) #percentage of females in this dataset
 #out
@@ -696,7 +717,7 @@ sorted <- locationresults[order(-locationresults$frequency),]
 head(sorted)
 
 ```
-These results are helpful. Previously we saw fractures at the most serious problem. However, when we factor in the body_part we see the internal injuries to the head at home and in the public location is the most serious problem
+These results are helpful. Previously we saw fractures at the most serious problem. However, when we factor in the body_part we see the internal injuries to the head at home and in the public location is the most serious problem.
 
 ```{r, ignore=TRUE}
 rm(locationresults, sorted)
@@ -804,10 +825,6 @@ As we combine the various data columns to our data exploration, we are seeing di
 As previously observed, females at home, suffer internal injuries to their heads when landing on the floors. Let's look at the revised dataset when we look at the most frequently sustain injuries.
 
 ```{r}
-if (system.file(package = "circlepacketR") == "") {
-  install.packages("circlepacketR")
-}
-
 library(sqldf)
 
 #
@@ -824,8 +841,17 @@ locationresults <- sqldf('select sex, location, diagnosis, body_part, frequency
                         ORDER BY frequency DESC
                         ')
 
+mosaicplot(xtabs(frequency ~ sex + diagnosis + location +  body_part, data = locationresults),
+           main = "Combination of All Major Injury Factors",
+           shade = TRUE)
+
+if (system.file(package = "knitr") == "") {
+  install.packages("knitr")
+}
+library(knitr)
 
 
+kable(locationresults, format = "html", align = "c", caption = "Combination of All Major Injury Factors")
 
 ```
 
@@ -913,99 +939,162 @@ df_llm <- df_modelingdata
 
 
 
-## Creating Binary Columns
-Using numeric value for the modeling is more efficient. In this step, we'll convert the character columns into n number of binary columns.
-
-The fastDummies library comes from "Kaplan, J. & Schlegel, B. (2023). fastDummies: Fast Creation of Dummy (Binary) Columns and Rows from Categorical Variables. Version 1.7.1. URL: https://github.com/jacobkap/fastDummies, https://jacobkap.github.io/fastDummies/."
-
-```{r}
-if (system.file(package = "fastDummies") == "") {
-  install.packages("fastDummies")
-}
-
-library(fastDummies)
-
-#each df will need the case number as a unique ID to merge with the df_modelingdata
-casenumber <- df_modelingdata$cpsc_case_number
 
 
-#create a df for each of the columns to make into binary columns
-sex <- df_modelingdata$sex
-df1 <- fastDummies::dummy_cols(as.data.frame(sex))
-#add the case number, remove the sex column
-df1$cpsc_case_number <- casenumber
-df1 <- select(df1, -c(sex))
-
-diagnosis <- df_modelingdata$diagnosis
-df2 <- fastDummies::dummy_cols(as.data.frame(diagnosis))
-df2$cpsc_case_number <- casenumber
-df2 <- select(df2, -c(diagnosis))
-
-bodypart <- df_modelingdata$body_part
-df3 <- fastDummies::dummy_cols(as.data.frame(bodypart))
-df3$cpsc_case_number <- casenumber
-df3 <- select(df3, -c(bodypart))
-
-location <- df_modelingdata$location
-df4 <- fastDummies::dummy_cols(as.data.frame(location))
-df4$cpsc_case_number <- casenumber
-df4 <- select(df4, -c(location))
-
-product <- df_modelingdata$product_1
-df5 <- fastDummies::dummy_cols(as.data.frame(product))
-df5$cpsc_case_number <- casenumber
-df5 <- select(df5, -c(product))
-
-
-#merge each of the small columns into df_modelingdata
-df_modelingdata <- merge(df_modelingdata, df1, by = "cpsc_case_number")
-df_modelingdata <- merge(df_modelingdata, df2, by = "cpsc_case_number")
-df_modelingdata <- merge(df_modelingdata, df3, by = "cpsc_case_number")
-df_modelingdata <- merge(df_modelingdata, df4, by = "cpsc_case_number")
-df_modelingdata <- merge(df_modelingdata, df5, by = "cpsc_case_number")
-
-rm(sex, diagnosis, bodypart, location, product)
-rm(df1, df2, df3, df4, df5)
-
-#now that these columns are now binary, it is time to remove the originals
-df_modelingdata <- select(df_modelingdata, -c(sex, diagnosis, body_part, location, product_1))
-
-
-```
-
-I don't believe the case number will help the modeling, so I'll remove this column from df_modelingdata. For the modeling, the narrative column isn't not helpful.
+I don't believe the case number or the treatment date will help the modeling, so I'll remove this column from df_modelingdata. For the modeling, the narrative column isn't not helpful.
 
 ```{r}
-#df_modelingdata <- select(df_modelingdata, -c(cpsc_case_number, narrative))
-df_modelingdata <- select(df_modelingdata, -c(treatment_date))
+df_modelingdata <- select(df_modelingdata, -c(cpsc_case_number, narrative))
+
 
 summary(df_modelingdata)
+head(df_modelingdata)
 ```
 
 # Data Modeling with Hiearchical Model
-For this model, I was initially thinking of using a hierarchical clustering model, but I believe my data exploration exposed a hierarchy, so I'm going to look at k-mean-clustering model to look at the data from a different perspective. Its quick and easy to do, but might reveal something interesting.
+For this model, I was initially thinking of using a hierarchical clustering model, but I believe my data exploration exposed a hierarchy, so I'm going to look at the pam clustering model to look at the data from a different perspective. Its quick and easy to do, but might reveal something interesting. Unfortunately the function has an upper limit of 65K rows. To work around this, I'll split the dataset into two small sets. The first is covers the range of 2019-2021, the second 2022. If you recall from the injuries based on time plot, we saw a significant increase in the daily injuries for that part of the dataset, so this gives us a chance to explore this question.
 
+## Data Split
 ```{r}
+
+#Dataset from 2019 - 2021
+df2019 <- sqldf('SELECT *
+                  FROM df_modelingdata
+                  WHERE treatment_date < \'2022-01-01\'
+                  ')
+
+df2022 <- sqldf('SELECT *
+                  FROM df_modelingdata
+                  WHERE treatment_date > \'2021-12-31\'
+                  ')
+
+df2019 <- select(df2019, -c(treatment_date))
+df2022 <- select(df2022, -c(treatment_date))
+
+head(df2019)
+
+head(df2022)
+
+#df_modelingdata <- select(df_modelingdata, -c(treatment_date))
+```
+
+
+## PAM Model 2019-2021
+For the first model, I'm taking the first 3 years of the dataset. This set has a lower median injuries than the 2022 set.
+```{r}
+
 if (system.file(package = "factoextra") == "") {
   install.packages("factoextra")
 }
 if (system.file(package = "cluster") == "") {
   install.packages("cluster")
 }
+if (system.file(package = "NbClust") == "") {
+  install.packages("NbClust")
+}
 
+#library(factoextra)
 library(factoextra)
 library(cluster)
+library(NbClust)
 
-clusters <- 4
-randomsets <- 25
+clusters <- 4 #selecting 4 because of the injuries
 
-model <- kmeans(df_modelingdata, centers = clusters, nstart = randomsets)
+pam_result <- pam(df2019, clusters)
+gc()#return memory
+
+# Print the cluster medoids
+print(pam_result$medoids)
+
+# Generate a silhouette plot
+silResult <- silhouette(pam_result)
+
+#plot(silResult)
+fviz_silhouette(silResult)
+print(silResult)
+
+#bind the results of the model to the data
+df2019Cluster <- cbind(df2019, pam_result$clustering)
+head(df2019Cluster)
+tail(df2019Cluster)
+
 
 ```
 
-# Using ChatGPT for Analysis of the Narrative Data
+```{r}
+colnames(df2019Cluster)[7] <- "cluster" 
+
+clusteringresults1 <- sqldf('select cluster, diagnosis, sex, location, body_part, frequency
+                        from(
+                            SELECT sex, location, diagnosis, body_part, cluster, count(*) AS "frequency"
+                            FROM df2019Cluster
+                            GROUP BY sex, location, diagnosis, body_part
+                            ORDER BY sex, location, diagnosis, body_part
+                        ) as t
+                        WHERE frequency > 1
+                        ORDER BY cluster, frequency DESC
+                        ')
+
+mosaicplot(xtabs(frequency ~ sex + cluster + diagnosis + location +  body_part, data = clusteringresults1),
+           main = "Combination of All Major Injury Factors for 2019-2021",
+           shade = TRUE)
+```
+What this shows is 4 closely sized clusters, which a wide distribution of the locations, injuries, and body parts.The difference between the sexes, is consistent with what was seen in the data exploration.
+
+
+
+
+## PAM Model 2
+This model is going to be used for exploring the 2022, which represents a higher daily median number of injuries, and is worth looking at separtely.
+
+```{r}
+if (system.file(package = "cluster") == "") {
+  install.packages("cluster")
+}
+
+#library(factoextra)
+library(cluster)
+
+clusters <- 4 #selecting 4 because of the injuries
+
+pam_result2 <- pam(df2022, clusters)
+gc()#return memory
+
+# Print the cluster medoids
+print(pam_result2$medoids)
+
+# Generate a silhouette plot
+silResult2 <- silhouette(pam_result2)
+
+#plot(silResult2)
+fviz_silhouette(silResult2)
+print(silResult2)
+
+#bind the results of the model to the data
+df2022Cluster <- cbind(df2022, pam_result2$clustering)
+head(df2022Cluster)
+tail(df2022Cluster)
+
+```
+Let's look at how the clustering compares with data exploration.
 
 ```{r}
 
-```
+colnames(df2022Cluster)[7] <- "cluster" 
 
+clusteringresults2 <- sqldf('select cluster, diagnosis, sex, location, body_part, frequency
+                        from(
+                            SELECT sex, location, diagnosis, body_part, cluster, count(*) AS "frequency"
+                            FROM df2022Cluster
+                            GROUP BY sex, location, diagnosis, body_part
+                            ORDER BY sex, location, diagnosis, body_part
+                        ) as t
+                        WHERE frequency > 1
+                        ORDER BY cluster, frequency DESC
+                        ')
+
+mosaicplot(xtabs(frequency ~ sex + cluster + diagnosis + location +  body_part, data = clusteringresults2),
+           main = "Combination of All Major Injury Factors for 2022",
+           shade = TRUE)
+```
+The output from the 2022 PAM model is much different from the previous model in that cluster 1 contains the vast majority of the cases. It contains the full gambit of injuries and locations, while clusters 2-4 tend to favor the contusions and lacerations.

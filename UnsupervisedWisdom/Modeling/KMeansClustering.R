@@ -9,3 +9,6 @@ clusters <- 4
 randomsets <- 25
 
 model <- kmeans(df_modelingdata, centers = clusters, nstart = randomsets)
+
+
+plot(silResult)
